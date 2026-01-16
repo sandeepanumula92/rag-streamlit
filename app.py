@@ -1,69 +1,77 @@
 import streamlit as st
 import os
-from langchain_groq import ChatGroq
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_pinecone import PineconeVectorStore
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_classic.chains import RetrievalQA
 import tempfile
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+from langchain_pinecone import PineconeVectorStore
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+# THIS IS THE CRITICAL CHANGE FOR 2026
+from langchain_classic.chains import RetrievalQA
 
-st.set_page_config(page_title="Free RAG Tutor", layout="wide")
-st.title("📚 Simple RAG Assistant")
+st.set_page_config(page_title="Gemini RAG Tutor", layout="wide")
+st.title("📚 Gemini + Pinecone RAG (2026 Edition)")
 
-# --- Setup Sidebar for API Keys ---
+# --- 1. Sidebar for API Keys ---
 with st.sidebar:
-    st.header("Configuration")
-    groq_api_key = st.text_input("Groq API Key", type="password")
+    st.header("Setup")
+    google_api_key = st.text_input("Google API Key", type="password")
     pinecone_api_key = st.text_input("Pinecone API Key", type="password")
-    pinecone_index = st.text_input("Pinecone Index Name", value="rag-index")
+    index_name = st.text_input("Pinecone Index Name", value="rag-index")
     uploaded_file = st.file_uploader("Upload a PDF", type="pdf")
 
-# --- Core RAG Logic ---
-if uploaded_file and groq_api_key and pinecone_api_key:
-    # Save uploaded file temporarily to load it
+# --- 2. Logic ---
+if uploaded_file and google_api_key and pinecone_api_key:
+    os.environ["GOOGLE_API_KEY"] = google_api_key
+    os.environ["PINECONE_API_KEY"] = pinecone_api_key
+
+    # Save and Load PDF
     with tempfile.NamedTemporaryFile(delete=False) as tf:
         tf.write(uploaded_file.getbuffer())
         file_path = tf.name
 
-    # 1. Process Document
-    loader = PyPDFLoader(file_path)
-    docs = loader.load()
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-    splits = text_splitter.split_documents(docs)
+    with st.status("Processing Document...", expanded=True) as status:
+        st.write("Reading PDF...")
+        loader = PyPDFLoader(file_path)
+        docs = loader.load()
+        
+        st.write("Splitting into chunks...")
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+        splits = text_splitter.split_documents(docs)
 
-    # 2. Initialize Vector DB
-    os.environ["PINECONE_API_KEY"] = pinecone_api_key
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    
-    vectorstore = PineconeVectorStore.from_documents(
-        splits, embeddings, index_name=pinecone_index
-    )
-    
-    # 3. Setup QA Chain
-    llm = ChatGroq(groq_api_key=groq_api_key, model_name="llama3-8b-8192")
-    qa_chain = RetrievalQA.from_chain_type(
-        llm=llm, chain_type="stuff", retriever=vectorstore.as_retriever()
-    )
+        st.write("Generating Gemini Embeddings...")
+        # Using Google embeddings (768 dims) to avoid Python 3.13 HF issues
+        embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
+        
+        st.write("Updating Pinecone...")
+        vectorstore = PineconeVectorStore.from_documents(
+            splits, embeddings, index_name=index_name
+        )
+        status.update(label="Ready! Ask your questions below.", state="complete")
 
-    st.success("Document processed and indexed!")
-
-    # --- Chat Interface ---
+    # --- 3. Chat Interface ---
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
     for msg in st.session_state.messages:
         st.chat_message(msg["role"]).write(msg["content"])
 
-    if prompt := st.chat_input("Ask something about your PDF"):
+    if prompt := st.chat_input("Ask about your PDF"):
         st.session_state.messages.append({"role": "user", "content": prompt})
         st.chat_message("user").write(prompt)
         
-        with st.spinner("Thinking..."):
+        # Setup RAG Chain using the Classic import
+        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash")
+        qa_chain = RetrievalQA.from_chain_type(
+            llm=llm, 
+            chain_type="stuff", 
+            retriever=vectorstore.as_retriever()
+        )
+
+        with st.spinner("Gemini is thinking..."):
             response = qa_chain.invoke(prompt)
             answer = response["result"]
             
         st.session_state.messages.append({"role": "assistant", "content": answer})
         st.chat_message("assistant").write(answer)
 else:
-    st.info("Please upload a PDF and enter your API keys in the sidebar to begin.")
+    st.info("Please enter your Google & Pinecone keys and upload a PDF.")
