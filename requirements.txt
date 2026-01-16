@@ -3,3 +3,4 @@ langchain-google-genai
 langchain-pinecone
 pypdf
 langchain
+langchain-groq
