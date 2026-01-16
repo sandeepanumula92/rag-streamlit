@@ -5,7 +5,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_pinecone import PineconeVectorStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader
-from langchain.chains import RetrievalQA
+from langchain_classic.chains import RetrievalQA
 import tempfile
 
 st.set_page_config(page_title="Free RAG Tutor", layout="wide")
