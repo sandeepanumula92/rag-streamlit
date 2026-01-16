@@ -1,8 +1,5 @@
 streamlit
-langchain
-langchain-community
-langchain-groq
+langchain-google-genai
 langchain-pinecone
-langchain-huggingface
 pypdf
-python-dotenv
+langchain
