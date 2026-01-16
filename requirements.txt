@@ -7,3 +7,4 @@ langchain-huggingface
 pypdf
 python-dotenv
 langchain-google-genai
+langchain-classic
