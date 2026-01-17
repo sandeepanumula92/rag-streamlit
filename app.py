@@ -44,9 +44,9 @@ def get_vector_db(file_bytes, g_key, p_key, i_name):
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
     splits = text_splitter.split_documents(docs)
 
+    # 2026 Stable Embedding Model (requires 768 dimensions in Pinecone)
     embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
     
-    # This will now give a clear error if dimensions don't match
     try:
         return PineconeVectorStore.from_documents(splits, embeddings, index_name=i_name)
     except Exception as e:
@@ -57,11 +57,11 @@ def get_vector_db(file_bytes, g_key, p_key, i_name):
 if prompt := st.chat_input("Ask a question..."):
     st.chat_message("user").write(prompt)
 
-    # Use 1.5 Flash for the LLM
+    # UPDATED: Using Gemini 2.5 Flash for 2026 stability
     llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
+        model="gemini-2.5-flash",
         google_api_key=GOOGLE_API_KEY,
-        temperature=0.2, # Lower temperature = more factual
+        temperature=0.1,
         safety_settings={HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE}
     )
 
@@ -82,11 +82,5 @@ if prompt := st.chat_input("Ask a question..."):
             st.chat_message("assistant").write(response)
 
     except Exception as e:
-        # This catches the ChatGoogleGenerativeAIError and explains it
-        st.error("⚠️ The Google API rejected the request.")
-        if "429" in str(e):
-            st.warning("Rate limit reached. Please wait 60 seconds.")
-        elif "400" in str(e):
-            st.info("Check if your Pinecone Index dimensions are set to 768.")
-        else:
-            st.write(f"Details: {e}")
+        st.error("⚠️ Model error or rejection.")
+        st.write(f"Details: {e}")
