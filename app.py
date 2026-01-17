@@ -11,11 +11,16 @@ from langchain_google_genai import HarmCategory, HarmBlockThreshold
 st.set_page_config(page_title="RAG vs LLM Comparison", layout="wide")
 st.title("📚 Intelligence Comparison: RAG vs. Standalone LLM")
 
-# --- 1. Sidebar Configuration ---
+# --- 1. Load Secrets Automatically ---
+# Streamlit will look for these in the "Secrets" dashboard (Cloud)
+# or in .streamlit/secrets.toml (Local)
+google_api_key = st.secrets["GOOGLE_API_KEY"]
+pinecone_api_key = st.secrets["PINECONE_API_KEY"]
+# Note: We keep the PDF uploader and index name in the sidebar
 with st.sidebar:
-    st.header("1. API Setup")
-    google_api_key = st.text_input("Google API Key", type="password")
-    pinecone_api_key = st.text_input("Pinecone API Key", type="password")
+    st.header("Configuration")
+    index_name = st.text_input("Pinecone Index Name", value="rag-index")
+    uploaded_file = st.file_uploader("Upload your Expert PDF", type="pdf")
     
     st.header("2. Knowledge Source")
     uploaded_file = st.file_uploader("Upload your Expert PDF", type="pdf")
