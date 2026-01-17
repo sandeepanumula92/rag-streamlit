@@ -5,13 +5,14 @@ from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmb
 from langchain_pinecone import PineconeVectorStore
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-# THIS IS THE CRITICAL CHANGE FOR 2026
 from langchain_classic.chains import RetrievalQA
 
-st.set_page_config(page_title="Gemini RAG Tutor", layout="wide")
-st.title("📚 Gemini + Pinecone RAG (2026 Edition)")
+# NEW: Import for safety settings
+from langchain_google_genai import HarmCategory, HarmBlockThreshold
 
-# --- 1. Sidebar for API Keys ---
+st.set_page_config(page_title="2026 Gemini RAG", layout="wide")
+st.title("📚 Gemini + Pinecone RAG")
+
 with st.sidebar:
     st.header("Setup")
     google_api_key = st.text_input("Google API Key", type="password")
@@ -19,59 +20,52 @@ with st.sidebar:
     index_name = st.text_input("Pinecone Index Name", value="rag-index")
     uploaded_file = st.file_uploader("Upload a PDF", type="pdf")
 
-# --- 2. Logic ---
 if uploaded_file and google_api_key and pinecone_api_key:
     os.environ["GOOGLE_API_KEY"] = google_api_key
     os.environ["PINECONE_API_KEY"] = pinecone_api_key
 
-    # Save and Load PDF
     with tempfile.NamedTemporaryFile(delete=False) as tf:
         tf.write(uploaded_file.getbuffer())
         file_path = tf.name
 
-    with st.status("Processing Document...", expanded=True) as status:
-        st.write("Reading PDF...")
+    with st.status("Indexing Document...", expanded=False):
         loader = PyPDFLoader(file_path)
         docs = loader.load()
-        
-        st.write("Splitting into chunks...")
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
         splits = text_splitter.split_documents(docs)
 
-        st.write("Generating Gemini Embeddings...")
-        # Using Google embeddings (768 dims) to avoid Python 3.13 HF issues
+        # Gemini 2026 standard embedding model
         embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
         
-        st.write("Updating Pinecone...")
         vectorstore = PineconeVectorStore.from_documents(
             splits, embeddings, index_name=index_name
         )
-        status.update(label="Ready! Ask your questions below.", state="complete")
 
-    # --- 3. Chat Interface ---
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
-    for msg in st.session_state.messages:
-        st.chat_message(msg["role"]).write(msg["content"])
-
+    # --- Chat Interface ---
     if prompt := st.chat_input("Ask about your PDF"):
-        st.session_state.messages.append({"role": "user", "content": prompt})
         st.chat_message("user").write(prompt)
         
-        # Setup RAG Chain using the Classic import
-        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash")
+        # Setup LLM with SAFETY SETTINGS to prevent the ChatGoogleGenerativeAIError
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash", # Updated for 2026
+            safety_settings={
+                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+            }
+        )
+        
         qa_chain = RetrievalQA.from_chain_type(
             llm=llm, 
             chain_type="stuff", 
             retriever=vectorstore.as_retriever()
         )
 
-        with st.spinner("Gemini is thinking..."):
-            response = qa_chain.invoke(prompt)
-            answer = response["result"]
-            
-        st.session_state.messages.append({"role": "assistant", "content": answer})
-        st.chat_message("assistant").write(answer)
-else:
-    st.info("Please enter your Google & Pinecone keys and upload a PDF.")
+        try:
+            with st.spinner("Gemini is analyzing..."):
+                response = qa_chain.invoke(prompt)
+                st.chat_message("assistant").write(response["result"])
+        except Exception as e:
+            st.error(f"Error: {str(e)}")
+            st.info("Check if your API Key is valid and if the content violates safety guidelines.")
